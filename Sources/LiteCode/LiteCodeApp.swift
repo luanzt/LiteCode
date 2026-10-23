@@ -82,14 +82,27 @@ struct LiteCodeApp: App {
                     .keyboardShortcut("]", modifiers: [.command, .option])
                 Button("Previous Workspace") { workspaces.selectAdjacent(-1) }
                     .keyboardShortcut("[", modifiers: [.command, .option])
+                Divider()
+                // ⌘1…⌘9 jump to the workspace at that position in the title bar; positions past
+                // the last workspace do nothing (a .disabled bound to the count went stale).
+                ForEach(1...9, id: \.self) { number in
+                    Button("Workspace \(number)") { workspaces.select(position: number) }
+                        .keyboardShortcut(KeyEquivalent(Character(String(number))))
+                }
             }
             CommandGroup(before: .sidebar) {
                 Button("Toggle Sidebar") { workspaces.toggleSidebar() }
                     .keyboardShortcut("l")
                 Button("Explorer") { workspace?.sidebarMode = .explorer }
                     .keyboardShortcut("e", modifiers: [.command, .shift])
-                Button("Search") { workspace?.focusSearch() }
-                    .keyboardShortcut("f", modifiers: [.command, .shift])
+                // Any focused code view seeds it, read-only diff panes included. A sidebar hidden
+                // with ⌘L comes back, as in VS Code.
+                Button("Search") {
+                    let focused = (NSApp.keyWindow ?? NSApp.mainWindow)?.firstResponder as? CodeTextView
+                    workspace?.focusSearch(seed: focused?.selectedSearchText)
+                    if workspaces.sidebarVisibility == .detailOnly { workspaces.toggleSidebar() }
+                }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
                 Button("Source Control Changes") { workspace?.sidebarMode = .changes }
                     .keyboardShortcut("g", modifiers: [.command, .control])
                 Button("Refresh Changes") { workspace?.refreshGit() }

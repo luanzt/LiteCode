@@ -52,6 +52,7 @@ private struct WelcomeView: View {
             Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
                 shortcut("Add Workspace", "⌘O")
                 shortcut("Next / Previous Workspace", "⌥⌘] / ⌥⌘[")
+                shortcut("Go to Workspace 1–9", "⌘1 … ⌘9")
                 shortcut("Save", "⌘S")
                 shortcut("Close Tab", "⌘W")
                 shortcut("Find / Replace", "⌘F / ⌥⌘F")

@@ -25,6 +25,8 @@ final class FindModel {
     private(set) var isInvalid = false
     /// Bumped to move keyboard focus into the find field.
     private(set) var focusRequest = 0
+    /// How that focus lands: select the old query, or caret after a freshly seeded one.
+    private(set) var selectsQueryOnFocus = true
 
     @ObservationIgnored weak var textView: CodeTextView?
     @ObservationIgnored private var refreshWork: DispatchWorkItem?
@@ -36,15 +38,14 @@ final class FindModel {
         return "\(currentIndex + 1) of \(total)"
     }
 
-    /// Opens the widget, seeding the query from a single-line selection, and focuses the field.
+    /// Opens the widget, seeding the query from a single-line selection, and focuses the field:
+    /// caret at the end of a seeded query, otherwise the previous query selected.
     func open(replace: Bool) {
-        if let textView {
-            let selection = textView.selectedRange()
-            if selection.length > 0, selection.length < 500 {
-                let selected = textView.characters.substring(with: selection)
-                if !selected.contains("\n") { query = selected }
-            }
+        let selected = textView?.selectedSearchText
+        if let selected {
+            query = regex ? NSRegularExpression.escapedPattern(for: selected) : selected
         }
+        selectsQueryOnFocus = selected == nil
         if replace { showReplace = true }
         isVisible = true
         focusRequest += 1

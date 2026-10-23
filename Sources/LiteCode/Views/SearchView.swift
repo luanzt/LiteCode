@@ -4,7 +4,7 @@ import SwiftUI
 /// Sidebar search across the workspace (⇧⌘F), grouped by file like VS Code's search view.
 struct SearchView: View {
     @Environment(Workspace.self) private var workspace
-    @FocusState private var isFieldFocused: Bool
+    @State private var isFieldFocused = false
 
     var body: some View {
         @Bindable var search = workspace.search
@@ -12,10 +12,16 @@ struct SearchView: View {
             SectionHeader(title: "Search") {}
             HStack(spacing: 6) {
                 LucideImage(.search, size: 13).foregroundStyle(Theme.UI.inactiveForeground)
-                TextField("Search", text: $search.query)
-                    .textFieldStyle(.plain)
-                    .focused($isFieldFocused)
-                    .onSubmit(runSearch)
+                // Focuses on appear and on every ⇧⌘F (searchFocusRequest).
+                CommandTextField(
+                    text: $search.query, placeholder: "Search", focusRequest: workspace.searchFocusRequest,
+                    selectsAllOnFocus: workspace.searchFocusSelectsAll,
+                    onCommand: { selector in
+                        guard selector == #selector(NSResponder.insertNewline(_:)) else { return false }
+                        runSearch()
+                        return true
+                    },
+                    onFocusChange: { isFieldFocused = $0 })
                 OptionToggle(icon: .caseSensitive, help: "Match Case", isOn: $search.caseSensitive)
                 OptionToggle(icon: .wholeWord, help: "Match Whole Word", isOn: $search.wholeWord)
                 OptionToggle(icon: .regex, help: "Use Regular Expression", isOn: $search.regex)
@@ -58,10 +64,8 @@ struct SearchView: View {
             }
         }
         .onAppear {
-            isFieldFocused = true
             if !search.query.isEmpty { runSearch() }
         }
-        .onChange(of: workspace.searchFocusRequest) { isFieldFocused = true }
         .onChange(of: search.query) { runSearch() }
         .onChange(of: search.caseSensitive) { runSearch() }
         .onChange(of: search.wholeWord) { runSearch() }

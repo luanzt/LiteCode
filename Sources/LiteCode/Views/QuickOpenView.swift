@@ -17,13 +17,20 @@ struct QuickOpenView: View {
                 .contentShape(Rectangle())
                 .onTapGesture { workspace.cancelQuickOpen() }
             VStack(spacing: 4) {
-                QuickOpenField(
+                CommandTextField(
                     text: Bindable(model).query,
                     placeholder: "Search files by name",
                     focusRequest: model.focusRequest,
-                    onMove: model.moveSelection,
-                    onSubmit: workspace.openQuickOpenSelection,
-                    onCancel: workspace.cancelQuickOpen)
+                    onCommand: { selector in
+                        switch selector {
+                        case #selector(NSResponder.moveDown(_:)): model.moveSelection(1)
+                        case #selector(NSResponder.moveUp(_:)): model.moveSelection(-1)
+                        case #selector(NSResponder.insertNewline(_:)): workspace.openQuickOpenSelection()
+                        case #selector(NSResponder.cancelOperation(_:)): workspace.cancelQuickOpen()
+                        default: return false
+                        }
+                        return true
+                    })
                     .frame(height: 26)
                     .padding(.horizontal, 8)
                     .background(RoundedRectangle(cornerRadius: 4).fill(Color(nsColor: NSColor(hex: "#F0F0F00A"))))
@@ -120,64 +127,5 @@ private struct QuickOpenRow: View {
             result[lower..<upper].inlinePresentationIntent = .stronglyEmphasized
         }
         return result
-    }
-}
-
-/// AppKit text field: its delegate sees ↑ ↓ ↩ and Esc as commands before the field editor acts
-/// on them, which SwiftUI's TextField doesn't reliably expose.
-private struct QuickOpenField: NSViewRepresentable {
-    @Binding var text: String
-    let placeholder: String
-    let focusRequest: Int
-    let onMove: (Int) -> Void
-    let onSubmit: () -> Void
-    let onCancel: () -> Void
-
-    func makeNSView(context: Context) -> NSTextField {
-        let field = NSTextField()
-        field.isBordered = false
-        field.drawsBackground = false
-        field.focusRingType = .none
-        field.font = .systemFont(ofSize: 13)
-        field.textColor = Theme.foreground
-        field.placeholderAttributedString = NSAttributedString(string: placeholder, attributes: [
-            .foregroundColor: Theme.inactiveForeground, .font: NSFont.systemFont(ofSize: 13),
-        ])
-        field.delegate = context.coordinator
-        return field
-    }
-
-    func updateNSView(_ field: NSTextField, context: Context) {
-        context.coordinator.parent = self
-        if field.stringValue != text { field.stringValue = text }
-        if context.coordinator.focusedRequest != focusRequest {
-            context.coordinator.focusedRequest = focusRequest
-            DispatchQueue.main.async { field.window?.makeFirstResponder(field) }
-        }
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
-
-    final class Coordinator: NSObject, NSTextFieldDelegate {
-        var parent: QuickOpenField
-        var focusedRequest = -1
-
-        init(parent: QuickOpenField) { self.parent = parent }
-
-        func controlTextDidChange(_ notification: Notification) {
-            guard let field = notification.object as? NSTextField else { return }
-            parent.text = field.stringValue
-        }
-
-        func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
-            switch selector {
-            case #selector(NSResponder.moveDown(_:)): parent.onMove(1)
-            case #selector(NSResponder.moveUp(_:)): parent.onMove(-1)
-            case #selector(NSResponder.insertNewline(_:)): parent.onSubmit()
-            case #selector(NSResponder.cancelOperation(_:)): parent.onCancel()
-            default: return false
-            }
-            return true
-        }
     }
 }

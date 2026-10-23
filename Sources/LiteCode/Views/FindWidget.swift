@@ -4,9 +4,8 @@ import SwiftUI
 /// VS Code-style find/replace box pinned to the editor's top-right corner.
 struct FindWidget: View {
     @Bindable var find: FindModel
-    @FocusState private var focus: Field?
-
-    private enum Field { case find, replace }
+    @State private var isFindFocused = false
+    @State private var isReplaceFocused = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 2) {
@@ -18,14 +17,22 @@ struct FindWidget: View {
             .disabled(!find.canReplace)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 2) {
-                    InputBox(isFocused: focus == .find, isInvalid: find.isInvalid) {
-                        TextField("Find", text: $find.query)
-                            .textFieldStyle(.plain)
-                            .focused($focus, equals: .find)
-                            .onKeyPress(.return, phases: .down) { press in
-                                press.modifiers.contains(.shift) ? find.previous() : find.next()
-                                return .handled
-                            }
+                    InputBox(isFocused: isFindFocused, isInvalid: find.isInvalid) {
+                        CommandTextField(
+                            text: $find.query, placeholder: "Find", focusRequest: find.focusRequest,
+                            selectsAllOnFocus: find.selectsQueryOnFocus,
+                            onCommand: { selector in
+                                switch selector {
+                                case #selector(NSResponder.insertNewline(_:)):
+                                    NSEvent.modifierFlags.contains(.shift) ? find.previous() : find.next()
+                                case #selector(NSResponder.cancelOperation(_:)):
+                                    find.close()
+                                default:
+                                    return false
+                                }
+                                return true
+                            },
+                            onFocusChange: { isFindFocused = $0 })
                         OptionToggle(icon: .caseSensitive, help: "Match Case", isOn: $find.caseSensitive)
                         OptionToggle(icon: .wholeWord, help: "Match Whole Word", isOn: $find.wholeWord)
                         OptionToggle(icon: .regex, help: "Use Regular Expression", isOn: $find.regex)
@@ -45,11 +52,18 @@ struct FindWidget: View {
                 }
                 if find.showReplace && find.canReplace {
                     HStack(spacing: 2) {
-                        InputBox(isFocused: focus == .replace, isInvalid: false) {
-                            TextField("Replace", text: $find.replacement)
-                                .textFieldStyle(.plain)
-                                .focused($focus, equals: .replace)
-                                .onSubmit(find.replaceCurrent)
+                        InputBox(isFocused: isReplaceFocused, isInvalid: false) {
+                            CommandTextField(
+                                text: $find.replacement, placeholder: "Replace", focusRequest: 0,
+                                onCommand: { selector in
+                                    switch selector {
+                                    case #selector(NSResponder.insertNewline(_:)): find.replaceCurrent()
+                                    case #selector(NSResponder.cancelOperation(_:)): find.close()
+                                    default: return false
+                                    }
+                                    return true
+                                },
+                                onFocusChange: { isReplaceFocused = $0 })
                         }
                         WidgetButton(icon: .replace, help: "Replace (↩)", action: find.replaceCurrent)
                             .disabled(find.currentIndex == nil)
@@ -65,17 +79,6 @@ struct FindWidget: View {
             .shadow(color: .black.opacity(0.45), radius: 6, y: 2))
         .overlay(UnevenRoundedRectangle(bottomLeadingRadius: 6, bottomTrailingRadius: 6)
             .strokeBorder(Theme.UI.border, lineWidth: 1))
-        .onExitCommand(perform: find.close)
-        .onAppear(perform: focusQuery)
-        .onChange(of: find.focusRequest) { focusQuery() }
-    }
-
-    /// Focuses the find field with its text selected, so typing replaces the last query.
-    private func focusQuery() {
-        focus = .find
-        DispatchQueue.main.async {
-            NSApp.sendAction(#selector(NSResponder.selectAll(_:)), to: nil, from: nil)
-        }
     }
 }
 

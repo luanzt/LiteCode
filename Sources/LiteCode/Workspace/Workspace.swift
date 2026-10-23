@@ -152,9 +152,18 @@ final class Workspace: Identifiable {
     let search = SearchModel()
     /// Bumped to move keyboard focus into the search field (⇧⌘F).
     private(set) var searchFocusRequest = 0
+    /// Whether that focus selects the query (typing replaces it) or leaves the caret after a query
+    /// just filled from the editor's selection.
+    private(set) var searchFocusSelectsAll = true
 
-    func focusSearch() {
+    /// ⇧⌘F: shows the search view, seeded with `selection` (the editor's selected text) as VS
+    /// Code does, which starts a search right away.
+    func focusSearch(seed selection: String? = nil) {
         sidebarMode = .search
+        if let selection {
+            search.query = search.regex ? NSRegularExpression.escapedPattern(for: selection) : selection
+        }
+        searchFocusSelectsAll = selection == nil
         searchFocusRequest += 1
     }
 

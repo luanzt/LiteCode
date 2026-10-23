@@ -47,6 +47,15 @@ final class CodeTextView: NSTextView {
     /// Swift String on every access, which shows up per keystroke in large files.
     var characters: NSString { textStorage?.mutableString ?? "" }
 
+    /// The selection as a search query (⌘F, ⇧⌘F): only a non-empty, single-line selection under
+    /// 500 characters, as VS Code seeds its find widgets.
+    var selectedSearchText: String? {
+        let selection = selectedRange()
+        guard selection.length > 0, selection.length < 500 else { return nil }
+        let text = characters.substring(with: selection)
+        return text.contains("\n") || text.contains("\r") ? nil : text
+    }
+
     /// UTF-16 offsets where each line starts; rebuilt lazily after edits. A trailing newline
     /// yields a final start equal to the length (the empty last line).
     var lineStarts: [Int] {

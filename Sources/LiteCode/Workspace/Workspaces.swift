@@ -92,6 +92,12 @@ final class Workspaces {
         activate(all[(index + offset + all.count) % all.count])
     }
 
+    /// Activates the workspace at a 1-based title-bar position; positions past the end do nothing.
+    func select(position: Int) {
+        guard all.indices.contains(position - 1) else { return }
+        activate(all[position - 1])
+    }
+
     /// Moves a workspace tab into the slot currently held by `target` (drag to reorder).
     func move(_ id: Workspace.ID, to target: Workspace.ID) {
         guard id != target,

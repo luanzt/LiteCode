@@ -27,11 +27,12 @@ and terminals alive. The workspace list and each one's open files are restored o
 | --- | --- |
 | Add workspace / New file | ⌘O / ⌘N |
 | Next / previous workspace | ⌥⌘] / ⌥⌘[ |
+| Go to workspace 1–9 (title-bar order) | ⌘1 … ⌘9 |
 | Save / Save all | ⌘S / ⌥⌘S |
 | Close tab / Next, previous tab | ⌘W / ⇧⌘] ⇧⌘[ |
 | Find / Replace in file / Next / Previous | ⌘F / ⌥⌘F / ⌘G / ⇧⌘G |
 | Go to file (Quick Open: fuzzy file name search, recently opened first) | ⌘P |
-| Search in workspace | ⇧⌘F |
+| Search in workspace (a single-line selection seeds ⌘F and ⇧⌘F) | ⇧⌘F |
 | Toggle comment / Indent / Outdent | ⌘/ / ⌘] / ⌘[ |
 | Explorer / Changes | ⇧⌘E / ⌃⌘G |
 | Toggle sidebar | ⌘L |
