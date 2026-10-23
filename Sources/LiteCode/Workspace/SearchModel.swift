@@ -71,7 +71,8 @@ final class SearchModel {
         }
     }
 
-    private static func files(in root: URL, useGit: Bool) async -> [URL] {
+    /// Files to search or offer in Quick Open: git's list (honoring .gitignore) or a filtered walk.
+    static func files(in root: URL, useGit: Bool) async -> [URL] {
         if useGit, let paths = await Git.listFiles(in: root) {
             return paths.map { root.appendingPathComponent($0) }
         }

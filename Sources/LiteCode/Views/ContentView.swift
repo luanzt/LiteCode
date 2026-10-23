@@ -50,6 +50,9 @@ private struct WorkspaceView: View {
             }
             StatusBar()
         }
+        .overlay(alignment: .top) {
+            if workspace.quickOpen.isVisible { QuickOpenView() }
+        }
     }
 
     private var resizeHandle: some View {

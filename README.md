@@ -9,8 +9,13 @@ integrated terminal ([SwiftTerm](https://github.com/migueldeicaza/SwiftTerm)).
 ```sh
 ./scripts/bundle.sh            # build/LiteCode.app
 ./scripts/bundle.sh --install  # also copies it to /Applications
-swift test                     # diff alignment + git status parsing
+./scripts/package.sh 1.2.3     # build/LiteCode-1.2.3.dmg
+swift test                     # diff alignment, git status parsing, fuzzy matching
 ```
+
+Releases are published on GitHub with a signed [Sparkle](https://sparkle-project.org) appcast
+(`appcast.xml` on `main`); installed copies update via **LiteCode ▸ Check for Updates…**. Builds
+are not notarized, so the first manual install needs right-click ▸ Open.
 
 Add folders as workspaces (⌘O or the `+` in the title bar), or `open -a LiteCode <folder>`.
 Each workspace is a tab in the title bar; switching keeps its editor tabs, unsaved edits,
@@ -25,6 +30,7 @@ and terminals alive. The workspace list and each one's open files are restored o
 | Save / Save all | ⌘S / ⌥⌘S |
 | Close tab / Next, previous tab | ⌘W / ⇧⌘] ⇧⌘[ |
 | Find / Replace in file / Next / Previous | ⌘F / ⌥⌘F / ⌘G / ⇧⌘G |
+| Go to file (Quick Open: fuzzy file name search, recently opened first) | ⌘P |
 | Search in workspace | ⇧⌘F |
 | Toggle comment / Indent / Outdent | ⌘/ / ⌘] / ⌘[ |
 | Explorer / Changes | ⇧⌘E / ⌃⌘G |

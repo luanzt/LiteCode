@@ -9,6 +9,8 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", from: "1.2.0"),
+        // Auto-update from the GitHub Releases appcast (same setup and version as mTerm).
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4"),
     ],
     targets: [
         // Pure logic (diff alignment, git status parsing) kept AppKit-free so it is unit-testable.
@@ -18,6 +20,7 @@ let package = Package(
             dependencies: [
                 "LiteCodeCore",
                 .product(name: "SwiftTerm", package: "SwiftTerm"),
+                .product(name: "Sparkle", package: "Sparkle"),
             ],
             // Material Icon Theme 5.39.0 (MIT), copied from the VS Code extension.
             resources: [.copy("Resources/MaterialIcons")]),

@@ -1,4 +1,5 @@
 import AppKit
+import Sparkle
 import SwiftUI
 
 @main
@@ -24,6 +25,10 @@ struct LiteCodeApp: App {
         // Slim title bar like Cursor's.
         .windowToolbarStyle(.unifiedCompact)
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") { appDelegate.checkForUpdates() }
+                    .disabled(!appDelegate.canCheckForUpdates)
+            }
             CommandGroup(replacing: .newItem) {
                 Button("Open Folder…") { workspaces.promptAdd() }
                     .keyboardShortcut("o")
@@ -62,7 +67,12 @@ struct LiteCodeApp: App {
                 Button("Outdent Lines") { editingView?.outdentSelection() }
                     .keyboardShortcut("[")
             }
+            // ⌘P belongs to Quick Open, as in VS Code; there is nothing to print.
+            CommandGroup(replacing: .printItem) {}
             CommandMenu("Go") {
+                Button("Go to File…") { workspace?.showQuickOpen() }
+                    .keyboardShortcut("p")
+                Divider()
                 Button("Next Tab") { workspace?.selectAdjacentTab(1) }
                     .keyboardShortcut("]", modifiers: [.command, .shift])
                 Button("Previous Tab") { workspace?.selectAdjacentTab(-1) }
@@ -107,6 +117,16 @@ struct LiteCodeApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var keyMonitor: Any?
+    /// Sparkle, fed by the appcast the release script publishes. Started only in packaged builds:
+    /// `swift run` binaries have no SUFeedURL, and starting without one shows an error alert.
+    private let updaterController = SPUStandardUpdaterController(
+        startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
+
+    var canCheckForUpdates: Bool { Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") != nil }
+
+    func checkForUpdates() {
+        updaterController.checkForUpdates(nil)
+    }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         // Oh My Dark is a dark-only theme; keep alerts, panels, and the find bar dark too.
@@ -116,6 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let workspaces = Workspaces.shared
         workspaces.restore()
+        if canCheckForUpdates { updaterController.startUpdater() }
         for path in CommandLine.arguments.dropFirst() where !path.hasPrefix("-") {
             workspaces.open(path: URL(fileURLWithPath: path))
         }

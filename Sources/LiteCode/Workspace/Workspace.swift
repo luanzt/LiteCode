@@ -72,6 +72,11 @@ final class Workspace: Identifiable {
             if case .file(let previous) = tabs.first(where: { $0.id == oldValue }) {
                 previous.autoSave(on: .onFocusChange)
             }
+            if let path = activeTab?.fileURL.path {
+                recentPaths.removeAll { $0 == path }
+                recentPaths.insert(path, at: 0)
+                if recentPaths.count > 50 { recentPaths.removeLast() }
+            }
             revealActiveFile()
         }
     }
@@ -86,6 +91,38 @@ final class Workspace: Identifiable {
         guard !isRestoringTabs, let path = activeTab?.fileURL.path, let node = rootNode.reveal(path: path) else { return }
         revealedNodeID = node.id
         revealRequest += 1
+    }
+
+    // MARK: Quick Open
+
+    let quickOpen = QuickOpenModel()
+    /// Files of activated tabs, most recent first (absolute paths).
+    @ObservationIgnored private var recentPaths: [String] = []
+
+    /// ⌘P: opens Quick Open, or steps down its list when already open, as in VS Code.
+    func showQuickOpen() {
+        guard !quickOpen.isVisible else {
+            quickOpen.moveSelection(1)
+            return
+        }
+        let prefix = rootURL.path + "/"
+        // The current file is skipped so Enter on an empty query returns to the previous one.
+        let recents = recentPaths.dropFirst(activeTab?.fileURL.path == recentPaths.first ? 1 : 0)
+            .filter { $0.hasPrefix(prefix) }
+            .map { String($0.dropFirst(prefix.count)) }
+        quickOpen.show(root: rootURL, useGit: repositoryRoot != nil, recents: recents)
+    }
+
+    func openQuickOpenSelection() {
+        guard let item = quickOpen.selectedItem else { return }
+        quickOpen.close()
+        openFile(rootURL.appendingPathComponent(item.path))
+    }
+
+    /// Dismissed without opening: focus goes back to the editor, as in VS Code.
+    func cancelQuickOpen() {
+        quickOpen.close()
+        if let textView = activeEditor?.textView { textView.window?.makeFirstResponder(textView) }
     }
 
     var sidebarMode: SidebarMode = .explorer

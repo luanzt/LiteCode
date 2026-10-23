@@ -172,3 +172,29 @@ import Testing
         #expect(GutterMarks.compute(base: ["a"], current: ["a"]).isEmpty)
     }
 }
+
+@Suite struct FuzzyMatchTests {
+    private func ranked(_ query: String, _ paths: [String]) -> [String] {
+        paths.compactMap { path in FuzzyMatch.match(query, path: path).map { (path, $0.score) } }
+            .sorted { $0.1 > $1.1 }
+            .map(\.0)
+    }
+
+    @Test func prefersFileNameWordStartsOverScatteredPathMatches() {
+        let paths = ["src/recommendations/list.ts", "reducers/common.ts", "constants/commonly-used.ts"]
+        #expect(ranked("comm", paths) == ["reducers/common.ts", "constants/commonly-used.ts", "src/recommendations/list.ts"])
+    }
+
+    @Test func matchesAcrossWordBoundariesAndHighlightsThem() {
+        let match = FuzzyMatch.match("emset", path: "reducers/email-settings.ts")
+        // "em" at the name start, then "set" at the start of "settings".
+        #expect(match?.indices == [9, 10, 15, 16, 17])
+        #expect(FuzzyMatch.match("sv", path: "screens/SigninView.tsx")?.indices == [8, 14])
+    }
+
+    @Test func slashQueriesMatchThePathAndNonMatchesAreRejected() {
+        #expect(ranked("red/com", ["utils/common.ts", "reducers/common.ts"]) == ["reducers/common.ts"])
+        #expect(FuzzyMatch.match("xyz", path: "reducers/common.ts") == nil)
+        #expect(FuzzyMatch.match("COMMON", path: "reducers/common.ts") != nil)
+    }
+}
