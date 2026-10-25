@@ -154,6 +154,22 @@ import Testing
         let results = TextSearch.matches(of: try SearchOptions(query: "value").expression(), in: text, limit: 2)
         #expect(results.flatMap(\.ranges).count == 2)
     }
+
+    @Test func previewCutsTheTextBeforeTheMatchAtAWordBoundaryLikeVSCode() {
+        let line = "  - Click on `Create New Release` Button."
+        let preview = TextSearch.preview(of: line, match: NSRange(location: 34, length: 6))
+        #expect(preview.text == "…Click on `Create New Release` Button.")
+        #expect((preview.text as NSString).substring(with: preview.match) == "Button")
+        // Short prefixes are only trimmed.
+        let short = TextSearch.preview(of: "    <ButtonView", match: NSRange(location: 5, length: 6))
+        #expect(short == SearchPreview(text: "<ButtonView", match: NSRange(location: 1, length: 6)))
+    }
+
+    @Test func resultsListEachFoldersFilesBeforeItsSubfolders() {
+        let paths = [".claude/skills/README.md", "README.md", ".claude/a.md", "AGENTS.md", "src/file10.ts", "src/file2.ts"]
+        #expect(paths.sorted(by: TextSearch.precedes)
+            == ["AGENTS.md", "README.md", ".claude/a.md", ".claude/skills/README.md", "src/file2.ts", "src/file10.ts"])
+    }
 }
 
 @Suite struct GutterMarksTests {
@@ -196,5 +212,67 @@ import Testing
         #expect(ranked("red/com", ["utils/common.ts", "reducers/common.ts"]) == ["reducers/common.ts"])
         #expect(FuzzyMatch.match("xyz", path: "reducers/common.ts") == nil)
         #expect(FuzzyMatch.match("COMMON", path: "reducers/common.ts") != nil)
+    }
+}
+
+@Suite struct JSXScannerTests {
+    /// `(source text, part)` pairs in scan order; `literal` marks string/comment ranges.
+    private func parts(_ source: String, literal: [Range<Int>] = []) -> [(String, JSXPart)] {
+        let chars = Array(source.utf16)
+        var found: [(String, JSXPart)] = []
+        JSXScanner.scan(chars, isLiteral: { i in literal.contains { $0.contains(i) } }) { range, part in
+            found.append((String(decoding: chars[range], as: UTF16.self), part))
+        }
+        return found
+    }
+
+    @Test func readsTagsAttributesTextAndNestedElementsInExpressions() {
+        let source = """
+        return (
+          <View style={s}>
+            {list.map((item) => (
+              <Tab.Item key={item} disabled />
+            ))}
+            <div>Hi</div>
+          </View>
+        )
+        """
+        let found = parts(source).filter { $0.1 != .text || !$0.0.allSatisfy(\.isWhitespace) }
+        #expect(found.map(\.0) == ["<", "View", "style", ">", "<", "Tab.Item", "key", "disabled", "/>",
+                                   "<", "div", ">", "Hi", "</", "div", ">", "</", "View", ">"])
+        #expect(found.map(\.1) == [.punctuation, .component, .attribute, .punctuation,
+                                   .punctuation, .component, .attribute, .attribute, .punctuation,
+                                   .punctuation, .tag, .punctuation, .text, .punctuation, .tag, .punctuation,
+                                   .punctuation, .component, .punctuation])
+    }
+
+    @Test func comparisonsGenericsAndLiteralsAreNotElements() {
+        #expect(parts("if (a <b && c) {}").isEmpty)
+        #expect(parts("const [x] = useState<string>('')").isEmpty)
+        #expect(parts("f() <g").isEmpty)
+        #expect(parts("s = '<div>'", literal: [4..<11]).isEmpty)
+    }
+
+    @Test func attributeStringsAndBracesInsideThemDoNotEndTheTag() {
+        // The string "}>" (offsets 9..<13) is a literal, so the tag ends at the real `>`.
+        let found = parts("<a title=\"}>\" b>x</a>", literal: [9..<13])
+        #expect(found.map(\.0) == ["<", "a", "title", "b", ">", "x", "</", "a", ">"])
+    }
+}
+
+@Suite struct BracketPairsTests {
+    private func depths(_ source: String, skip: Range<Int>? = nil) -> [Int: Int] {
+        var found: [Int: Int] = [:]
+        BracketPairs.scan(Array(source.utf16), skip: { skip?.contains($0) ?? false }) { found[$0] = $1 }
+        return found
+    }
+
+    @Test func pairsShareTheirNestingDepth() {
+        #expect(depths("f({a: [1]})") == [1: 0, 2: 1, 6: 2, 8: 2, 9: 1, 10: 0])
+    }
+
+    @Test func skipsLiteralsAndLeavesMismatchedClosersUncolored() {
+        #expect(depths("(\")\")", skip: 1..<4) == [0: 0, 4: 0])
+        #expect(depths("(]") == [0: 0])
     }
 }

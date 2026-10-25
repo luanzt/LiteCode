@@ -135,6 +135,8 @@ private struct TabItem: View {
         .frame(maxHeight: .infinity)
         .background(isActive ? Theme.UI.editorBackground : .clear)
         .contentShape(Rectangle())
+        // VS Code closes a tab on a middle (mouse wheel) click.
+        .overlay(MiddleClickCatcher { workspace.closeTab(tab.id) })
         .onHover { isHovered = $0 }
         .onTapGesture { workspace.activeTabID = tab.id }
         .help(tab.fileURL.path)
@@ -174,6 +176,42 @@ private struct Breadcrumbs: View {
         .padding(.horizontal, 14)
         .frame(height: 24)
         .background(Theme.UI.editorBackground)
+    }
+}
+
+/// Runs `action` on a middle-button click inside the view; SwiftUI has no gesture for it.
+private struct MiddleClickCatcher: NSViewRepresentable {
+    let action: () -> Void
+
+    func makeNSView(context: Context) -> CatcherView { CatcherView() }
+
+    func updateNSView(_ view: CatcherView, context: Context) {
+        view.action = action
+    }
+
+    final class CatcherView: NSView {
+        var action: (() -> Void)?
+        private var isPressed = false
+
+        /// Transparent to every other event, so the views below keep their clicks and hover.
+        /// The type is checked first: `buttonNumber` raises on non-mouse events.
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            guard let event = NSApp.currentEvent, event.type == .otherMouseDown || event.type == .otherMouseUp,
+                  event.buttonNumber == 2 else { return nil }
+            return super.hitTest(point)
+        }
+
+        override func otherMouseDown(with event: NSEvent) {
+            isPressed = event.buttonNumber == 2
+        }
+
+        /// Fires on release inside the view, like a click.
+        override func otherMouseUp(with event: NSEvent) {
+            defer { isPressed = false }
+            guard isPressed, event.buttonNumber == 2,
+                  bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
+            action?()
+        }
     }
 }
 

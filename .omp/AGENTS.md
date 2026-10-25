@@ -24,7 +24,8 @@ public half is baked into every shipped build as `SUPublicEDKey`.
 
 - `Sources/LiteCodeCore/` — pure, UI-free logic, covered by `Tests/LiteCodeCoreTests/`:
   `LineDiff` (row alignment, hunks, intra-line spans), `GitStatus` (porcelain parser with
-  staged/unstaged stages), `GutterDiff`, `TextSearch`, `FuzzyMatch`, `IconThemeManifest`.
+  staged/unstaged stages), `GutterDiff`, `TextSearch`, `FuzzyMatch`, `IconThemeManifest`,
+  `CodeStructure` (JSX element and bracket-pair scanners the highlighter runs after its regexes).
   Put new logic here when it can be tested without AppKit.
 - `Sources/LiteCode/` — the app:
   - `Editor/` — `EditorDocument` (one per open file; owns its text storage, undo, dirty state,

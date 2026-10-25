@@ -1,19 +1,44 @@
 import AppKit
+import LiteCodeCore
 
 /// Regex-based highlighting: cheap, language-agnostic enough for a light editor.
 struct Language {
     var name: String
     var lineComment: String?
     /// Token rules applied in order; later rules win where they overlap.
-    var rules: [(NSRegularExpression, SyntaxToken)]
+    var rules: [Rule]
+    /// Recognizes JSX elements after the rules: tag names, attributes, punctuation, text.
+    var jsx = false
+    /// Colors `()`, `[]` and `{}` by nesting depth, as VS Code's bracket pair colorization.
+    var colorsBrackets = true
+
+    struct Rule {
+        var regex: NSRegularExpression
+        /// `nil` paints matches as plain text.
+        var token: SyntaxToken?
+        /// Capture group painted instead of the whole match. Leading context is matched here
+        /// rather than in a lookbehind, which ICU re-evaluates at every position.
+        var group: Int
+        /// When set, only this regex's first capture group is painted, searched within `group`
+        /// (parameter names inside a parameter list).
+        var within: NSRegularExpression?
+
+        init(_ regex: NSRegularExpression, _ token: SyntaxToken?, group: Int = 0, within: NSRegularExpression? = nil) {
+            self.regex = regex
+            self.token = token
+            self.group = group
+            self.within = within
+        }
+    }
 
     static func detect(_ url: URL) -> Language {
         let ext = url.pathExtension.lowercased()
         let file = url.lastPathComponent.lowercased()
         switch ext {
         case "swift": return .cLike("Swift", swiftKeywords)
-        case "js", "jsx", "mjs", "cjs": return .cLike("JavaScript", jsKeywords, backticks: true)
-        case "ts", "tsx", "mts", "cts": return .cLike("TypeScript", jsKeywords + tsKeywords, backticks: true)
+        case "js", "jsx", "mjs", "cjs": return .javaScript("JavaScript", typeScript: false, jsx: true)
+        case "ts", "mts", "cts": return .javaScript("TypeScript", typeScript: true, jsx: false)
+        case "tsx": return .javaScript("TypeScript", typeScript: true, jsx: true)
         case "go": return .cLike("Go", goKeywords, backticks: true)
         case "rs": return .cLike("Rust", rustKeywords)
         case "java": return .cLike("Java", javaKeywords)
@@ -39,7 +64,7 @@ struct Language {
         case "makefile", "dockerfile", "gemfile", "podfile", "rakefile", ".gitignore", ".env", ".zshrc", ".bashrc":
             return .hashComment(file.capitalized, shellKeywords)
         default:
-            return Language(name: "Plain Text", lineComment: nil, rules: [])
+            return Language(name: "Plain Text", lineComment: nil, rules: [], colorsBrackets: false)
         }
     }
 
@@ -74,78 +99,117 @@ struct Language {
         var alternatives = ["//[^\\n]*", "/\\*.*?\\*/", doubleQuoted, singleQuoted]
         if backticks { alternatives.append(backtick) }
         return Language(name: name, lineComment: "//", rules: [
-            (typeName, .type),
-            (call, .function),
-            (keywords(words), .keyword),
-            (rx("^\\s*#\\s*\\w+", [.anchorsMatchLines]), .keyword),
-            (rx("@\\w+"), .decorator),
-            (languageConstant, .constant),
-            (languageVariable, .languageVariable),
-            (number, .constant),
-            (stringsAndComments(alternatives), .stringOrComment),
+            Rule(typeName, .type),
+            Rule(call, .function),
+            Rule(keywords(words), .keyword),
+            Rule(rx("^\\s*#\\s*\\w+", [.anchorsMatchLines]), .keyword),
+            Rule(rx("@\\w+"), .decorator),
+            Rule(languageConstant, .constant),
+            Rule(languageVariable, .languageVariable),
+            Rule(number, .constant),
+            Rule(stringsAndComments(alternatives), .stringOrComment),
         ])
+    }
+
+    /// JavaScript and TypeScript, approximating the scopes VS Code's TypeScript grammar gives
+    /// Dracula: operators, parameters, type arguments, arrow-function names, imports, and JSX.
+    private static func javaScript(_ name: String, typeScript: Bool, jsx: Bool) -> Language {
+        let identifier = "[A-Za-z_$][\\w$]*"
+        // A parameter name opens the list or follows `,` / a destructuring brace, and is followed
+        // by its type, default, or the next separator (types after `:` never match).
+        let parameterNames = rx("(?:^|[,(\\[{])\\s*(?:\\.\\.\\.)?\\s*(\(identifier))(?=\\s*[?:,)}\\]=]|\\s*$)")
+        var rules = [
+            // PascalCase names are types; member accesses (`StyleSheet.create`, `Tab.Item`) and
+            // ALL_CAPS constants are plain variables, as in VS Code.
+            Rule(rx("(?<![\\w$.])[A-Z][A-Z0-9_$]*[a-z][\\w$]*(?![\\w$.])"), .type),
+            // Type arguments (`StyleProp<ViewStyle>`) take Dracula's type-parameter color.
+            Rule(rx("[\\w$]<([^<>()=;{}\\n]+)>"), .parameter, group: 1, within: rx("(?<![\\w$.])([A-Z][\\w$]*)")),
+        ]
+        if typeScript {
+            rules.append(Rule(rx("(?:[:<|&]|\\bas)\\s*\\b(string|number|boolean|any|unknown|never|object|symbol|bigint)\\b"), .type, group: 1))
+        }
+        rules += [
+            Rule(rx("(?<![\\w$])\(identifier)(?=\\()"), .function),
+            // `const name = (…) =>`: the variable names a function.
+            Rule(rx("\\b(?:const|let|var)\\s+(\(identifier))(?=\\s*(?::[^=\\n]+)?=\\s*(?:async\\s+)?(?:\\([^()]*\\)|\(identifier))\\s*(?::[^=;{}()]+)?=>)"), .function, group: 1),
+            Rule(keywords(typeScript ? jsKeywords + tsKeywords : jsKeywords), .keyword),
+            Rule(rx("=>|\\.\\.\\.|[=!]==?|[<>]=?|&&=?|\\|\\|=?|\\?\\?=?|\\*\\*=?|[-+*/%&|^]=?|\\?(?!\\.)|[!~:=]"), .keyword),
+            Rule(rx("@\\w+"), .decorator),
+            // Arrow-function, function, and method parameters.
+            Rule(rx("\\(([^();]*)\\)(?:\\s*:[^=;{}()]+?)?\\s*=>"), .parameter, group: 1, within: parameterNames),
+            Rule(rx("(?<![\\w$.])\(identifier)(?=\\s*=>)"), .parameter),
+            Rule(rx("\\bfunction\\b\\s*\\*?\\s*[\\w$]*\\s*(?:<[^>]*>)?\\s*\\(([^();]*)\\)"), .parameter, group: 1, within: parameterNames),
+            Rule(rx("^[ \\t]*(?:(?:async|static|get|set|public|private|protected|readonly|override)\\s+)*(?!(?:if|for|while|switch|catch|with|return|function)\\b)\(identifier)\\s*\\(([^();]*)\\)\\s*(?::[^{;=()]+)?\\{", [.anchorsMatchLines]), .parameter, group: 1, within: parameterNames),
+            // Imported bindings are plain variables.
+            Rule(rx("^[ \\t]*import[ \\t]+(?:type[ \\t]+)?([^;'\"]*?)\\s*\\bfrom\\b", [.anchorsMatchLines]), nil, group: 1, within: rx("(?<![\\w$])(?!(?:as|type)\\b)(\(identifier))")),
+            Rule(languageConstant, .constant),
+            Rule(languageVariable, .languageVariable),
+            Rule(number, .constant),
+            Rule(stringsAndComments(["//[^\\n]*", "/\\*.*?\\*/", doubleQuoted, singleQuoted, backtick]), .stringOrComment),
+        ]
+        return Language(name: name, lineComment: "//", rules: rules, jsx: jsx)
     }
 
     private static func hashComment(_ name: String, _ words: [String], tripleQuotes: Bool = false) -> Language {
         var alternatives = ["#[^\\n]*", doubleQuoted, singleQuoted]
         if tripleQuotes { alternatives.insert(contentsOf: ["\"\"\".*?\"\"\"", "'''.*?'''"], at: 1) }
-        var rules: [(NSRegularExpression, SyntaxToken)] = [
-            (call, .function),
-            (keywords(words), .keyword),
-            (languageConstant, .constant),
-            (languageVariable, .languageVariable),
-            (number, .constant),
-            (stringsAndComments(alternatives), .stringOrComment),
+        var rules = [
+            Rule(call, .function),
+            Rule(keywords(words), .keyword),
+            Rule(languageConstant, .constant),
+            Rule(languageVariable, .languageVariable),
+            Rule(number, .constant),
+            Rule(stringsAndComments(alternatives), .stringOrComment),
         ]
         if name == "Python" {
-            rules.insert((typeName, .type), at: 0)
-            rules.insert((rx("@\\w+"), .decorator), at: 2)
+            rules.insert(Rule(typeName, .type), at: 0)
+            rules.insert(Rule(rx("@\\w+"), .decorator), at: 2)
         }
         // Dracula colors "$"-prefixed shell variables as constants.
-        if name == "Shell" { rules.insert((rx("\\$\\{?[A-Za-z_][A-Za-z0-9_]*\\}?"), .constant), at: 0) }
+        if name == "Shell" { rules.insert(Rule(rx("\\$\\{?[A-Za-z_][A-Za-z0-9_]*\\}?"), .constant), at: 0) }
         return Language(name: name, lineComment: "#", rules: rules)
     }
 
     private static let json = Language(name: "JSON", lineComment: "//", rules: [
-        (keywords(["true", "false", "null"]), .constant),
-        (number, .constant),
-        (stringsAndComments(["//[^\\n]*", doubleQuoted]), .stringOrComment),
-        (rx("\"(?:[^\"\\\\\\n]|\\\\.)*\"(?=\\s*:)"), .property),
+        Rule(keywords(["true", "false", "null"]), .constant),
+        Rule(number, .constant),
+        Rule(stringsAndComments(["//[^\\n]*", doubleQuoted]), .stringOrComment),
+        Rule(rx("\"(?:[^\"\\\\\\n]|\\\\.)*\"(?=\\s*:)"), .property),
     ])
 
     private static let yaml = Language(name: "YAML", lineComment: "#", rules: [
-        (rx("^\\s*-?\\s*[^\\s#:][^:\\n]*(?=:(?:\\s|$))", [.anchorsMatchLines]), .property),
-        (keywords(["true", "false", "null", "yes", "no"]), .constant),
-        (number, .constant),
-        (stringsAndComments(["#[^\\n]*", doubleQuoted, singleQuoted]), .stringOrComment),
+        Rule(rx("^\\s*-?\\s*[^\\s#:][^:\\n]*(?=:(?:\\s|$))", [.anchorsMatchLines]), .property),
+        Rule(keywords(["true", "false", "null", "yes", "no"]), .constant),
+        Rule(number, .constant),
+        Rule(stringsAndComments(["#[^\\n]*", doubleQuoted, singleQuoted]), .stringOrComment),
     ])
 
     private static let css = Language(name: "CSS", lineComment: nil, rules: [
-        (rx("[.#&]?[A-Za-z_-][\\w-]*(?=[^{};]*\\{)"), .keyword),
-        (rx("[\\w-]+(?=\\s*:[^;{]*;)"), .property),
-        (rx("-?\\b\\d+(?:\\.\\d+)?(?:px|em|rem|%|vh|vw|s|ms|deg)?\\b|#[0-9a-fA-F]{3,8}\\b"), .constant),
-        (stringsAndComments(["/\\*.*?\\*/", doubleQuoted, singleQuoted]), .stringOrComment),
+        Rule(rx("[.#&]?[A-Za-z_-][\\w-]*(?=[^{};]*\\{)"), .keyword),
+        Rule(rx("[\\w-]+(?=\\s*:[^;{]*;)"), .property),
+        Rule(rx("-?\\b\\d+(?:\\.\\d+)?(?:px|em|rem|%|vh|vw|s|ms|deg)?\\b|#[0-9a-fA-F]{3,8}\\b"), .constant),
+        Rule(stringsAndComments(["/\\*.*?\\*/", doubleQuoted, singleQuoted]), .stringOrComment),
     ])
 
     private static let markdown = Language(name: "Markdown", lineComment: nil, rules: [
-        (rx("^#{1,6} [^\\n]*", [.anchorsMatchLines]), .heading),
-        (rx("\\*\\*[^*\\n]+\\*\\*|__[^_\\n]+__"), .emphasis),
-        (rx("\\[[^\\]\\n]+\\]\\([^)\\n]+\\)"), .link),
-        (rx("^\\s*(?:[-*+>]|\\d+\\.) ", [.anchorsMatchLines]), .link),
-        (rx("```.*?```|`[^`\\n]+`", [.dotMatchesLineSeparators]), .code),
-    ])
+        Rule(rx("^#{1,6} [^\\n]*", [.anchorsMatchLines]), .heading),
+        Rule(rx("\\*\\*[^*\\n]+\\*\\*|__[^_\\n]+__"), .emphasis),
+        Rule(rx("\\[[^\\]\\n]+\\]\\([^)\\n]+\\)"), .link),
+        Rule(rx("^\\s*(?:[-*+>]|\\d+\\.) ", [.anchorsMatchLines]), .link),
+        Rule(rx("```.*?```|`[^`\\n]+`", [.dotMatchesLineSeparators]), .code),
+    ], colorsBrackets: false)
 
     private static let markup = Language(name: "Markup", lineComment: nil, rules: [
-        (rx("</?[A-Za-z][\\w:.-]*|/?>"), .keyword),
-        (rx("\\b[\\w:-]+(?==)"), .attribute),
-        (stringsAndComments([doubleQuoted, singleQuoted]), .string),
-        (rx("<!--.*?-->", [.dotMatchesLineSeparators]), .comment),
-    ])
+        Rule(rx("</?[A-Za-z][\\w:.-]*|/?>"), .keyword),
+        Rule(rx("\\b[\\w:-]+(?==)"), .attribute),
+        Rule(stringsAndComments([doubleQuoted, singleQuoted]), .string),
+        Rule(rx("<!--.*?-->", [.dotMatchesLineSeparators]), .comment),
+    ], colorsBrackets: false)
 
     private static let sql = Language(name: "SQL", lineComment: "--", rules: [
-        (rx("\\b(?:select|from|where|insert|into|values|update|set|delete|create|table|alter|drop|index|join|left|right|inner|outer|on|and|or|not|null|as|order|by|group|having|limit|offset|primary|key|references|default|unique|distinct|union|case|when|then|else|end|begin|commit|exists|in|is|like)\\b", [.caseInsensitive]), .keyword),
-        (number, .constant),
-        (stringsAndComments(["--[^\\n]*", "/\\*.*?\\*/", singleQuoted, doubleQuoted]), .stringOrComment),
+        Rule(rx("\\b(?:select|from|where|insert|into|values|update|set|delete|create|table|alter|drop|index|join|left|right|inner|outer|on|and|or|not|null|as|order|by|group|having|limit|offset|primary|key|references|default|unique|distinct|union|case|when|then|else|end|begin|commit|exists|in|is|like)\\b", [.caseInsensitive]), .keyword),
+        Rule(number, .constant),
+        Rule(stringsAndComments(["--[^\\n]*", "/\\*.*?\\*/", singleQuoted, doubleQuoted]), .stringOrComment),
     ])
 
     // MARK: Keyword lists
@@ -166,10 +230,14 @@ struct Language {
 
 /// Highlight categories, styled with Oh My Dark's Dracula Soft token colors.
 enum SyntaxToken: UInt8, CaseIterable {
-    case keyword, string, comment, constant, languageVariable, type, function, decorator
+    case keyword, string, comment, constant, languageVariable, type, function, decorator, parameter
     case property, attribute, heading, emphasis, link, code
+    /// Bracket pair colorization, cycling by nesting depth.
+    case bracket1, bracket2, bracket3
     /// Strings-and-comments alternation; resolved per match to `.string` or `.comment`.
     case stringOrComment
+
+    static let brackets: [SyntaxToken] = [.bracket1, .bracket2, .bracket3]
 
     var color: NSColor {
         switch self {
@@ -179,12 +247,16 @@ enum SyntaxToken: UInt8, CaseIterable {
         case .constant, .languageVariable, .heading: Palette.purple
         case .type, .property, .link: Palette.cyan
         case .function, .decorator, .attribute, .code: Palette.green
-        case .emphasis: Palette.orange
+        case .emphasis, .parameter: Palette.orange
+        case .bracket1: Palette.gold
+        case .bracket2: Palette.orchid
+        case .bracket3: Palette.blue
         }
     }
 
     /// Dracula Soft values: Keywords/Storage, Strings, Comments, Constants and this/self,
-    /// Types/Keys/Links, Functions/Decorators/attribute names, bold markup.
+    /// Types/Keys/Links, Functions/Decorators/attribute names, bold markup and parameters.
+    /// Oh My Dark keeps VS Code's default `editorBracketHighlight.foreground1…3`.
     private enum Palette {
         static let pink = NSColor(hex: "#f286c4")
         static let yellow = NSColor(hex: "#e7ee98")
@@ -193,16 +265,32 @@ enum SyntaxToken: UInt8, CaseIterable {
         static let cyan = NSColor(hex: "#97e1f1")
         static let green = NSColor(hex: "#62e884")
         static let orange = NSColor(hex: "#FFB86C")
+        static let gold = NSColor(hex: "#FFD700")
+        static let orchid = NSColor(hex: "#DA70D6")
+        static let blue = NSColor(hex: "#179FFF")
     }
 
     var isItalic: Bool {
         switch self {
-        case .languageVariable, .type, .decorator, .attribute: true
+        case .languageVariable, .type, .decorator, .attribute, .parameter: true
         default: false
         }
     }
 
     var isBold: Bool { self == .heading || self == .emphasis }
+}
+
+extension JSXPart {
+    /// VS Code scopes: `entity.name.tag` (pink), `support.class.component` (italic cyan),
+    /// `entity.other.attribute-name` (italic green); punctuation and text stay plain.
+    var token: SyntaxToken? {
+        switch self {
+        case .tag: .keyword
+        case .component: .type
+        case .attribute: .attribute
+        case .punctuation, .text: nil
+        }
+    }
 }
 
 /// A stretch of text with one style; `token == nil` is plain text.
@@ -226,12 +314,35 @@ enum SyntaxHighlighter {
         var styles = [UInt8](repeating: 0, count: length)
         let string = text as String
         styles.withUnsafeMutableBufferPointer { buffer in
-            for (regex, rule) in language.rules {
-                regex.enumerateMatches(in: string, range: full) { match, _, _ in
+            for rule in language.rules {
+                rule.regex.enumerateMatches(in: string, range: full) { match, _, _ in
                     guard let match, match.range.length > 0 else { return }
-                    let token = rule == .stringOrComment ? resolve(match, in: text) : rule
-                    let range = match.range
-                    buffer[range.location..<NSMaxRange(range)].update(repeating: token.rawValue + 1)
+                    let region = match.range(at: rule.group)
+                    guard region.location != NSNotFound, region.length > 0 else { return }
+                    guard let within = rule.within else {
+                        let token = rule.token == .stringOrComment ? resolve(match, in: text) : rule.token
+                        paint(buffer, region, token)
+                        return
+                    }
+                    within.enumerateMatches(in: string, range: region) { inner, _, _ in
+                        guard let range = inner?.range(at: 1), range.location != NSNotFound else { return }
+                        paint(buffer, range, rule.token)
+                    }
+                }
+            }
+            guard language.jsx || language.colorsBrackets else { return }
+            var chars = [UInt16](repeating: 0, count: length)
+            text.getCharacters(&chars, range: full)
+            let stringCode = code(.string), commentCode = code(.comment), propertyCode = code(.property)
+            if language.jsx {
+                JSXScanner.scan(chars, isLiteral: { buffer[$0] == stringCode || buffer[$0] == commentCode }) { range, part in
+                    paint(buffer, NSRange(location: range.lowerBound, length: range.count), part.token)
+                }
+            }
+            if language.colorsBrackets {
+                // JSON keys are strings too.
+                BracketPairs.scan(chars, skip: { [stringCode, commentCode, propertyCode].contains(buffer[$0]) }) { index, depth in
+                    buffer[index] = code(SyntaxToken.brackets[depth % SyntaxToken.brackets.count])
                 }
             }
         }
@@ -244,6 +355,15 @@ enum SyntaxHighlighter {
             start = index
         }
         return runs
+    }
+
+    /// Style code stored per UTF-16 unit: 0 is plain text.
+    nonisolated private static func code(_ token: SyntaxToken?) -> UInt8 {
+        token.map { $0.rawValue + 1 } ?? 0
+    }
+
+    nonisolated private static func paint(_ buffer: UnsafeMutableBufferPointer<UInt8>, _ range: NSRange, _ token: SyntaxToken?) {
+        buffer[range.location..<NSMaxRange(range)].update(repeating: code(token))
     }
 
     /// Indices of `new` runs that differ from the previously applied `old` ones: everything
@@ -270,22 +390,31 @@ enum SyntaxHighlighter {
     static func apply(_ runs: ArraySlice<StyleRun>, to storage: NSTextStorage, font: NSFont, force: Bool) {
         let italic = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
         let bold = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
+        // Families without an italic face (Fira Code) get a slanted regular face, as VS Code's
+        // synthetic italic: Chromium skews by 1/4.
+        let hasItalic = italic.fontDescriptor.symbolicTraits.contains(.italic)
+        let slant: NSNumber? = hasItalic ? nil : 0.25
         let paragraph = EditorSettings.paragraphStyle(for: font)
         storage.beginEditing()
         for run in runs where NSMaxRange(run.range) <= storage.length {
             let color = run.token?.color ?? Theme.editorForeground
+            let isItalic = run.token?.isItalic ?? false
             let runFont = run.token.map { $0.isItalic ? italic : ($0.isBold ? bold : font) } ?? font
+            let obliqueness = isItalic ? slant : nil
             if !force {
                 var matches = true
                 storage.enumerateAttributes(in: run.range, options: .longestEffectiveRangeNotRequired) { attributes, _, stop in
-                    if (attributes[.foregroundColor] as? NSColor) != color || (attributes[.font] as? NSFont) != runFont {
+                    if (attributes[.foregroundColor] as? NSColor) != color || (attributes[.font] as? NSFont) != runFont
+                        || (attributes[.obliqueness] as? NSNumber) != obliqueness {
                         matches = false
                         stop.pointee = true
                     }
                 }
                 if matches { continue }
             }
-            storage.setAttributes([.font: runFont, .foregroundColor: color, .paragraphStyle: paragraph], range: run.range)
+            var attributes: [NSAttributedString.Key: Any] = [.font: runFont, .foregroundColor: color, .paragraphStyle: paragraph]
+            if let obliqueness { attributes[.obliqueness] = obliqueness }
+            storage.setAttributes(attributes, range: run.range)
         }
         storage.endEditing()
     }

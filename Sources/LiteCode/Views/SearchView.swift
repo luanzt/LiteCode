@@ -42,20 +42,22 @@ struct SearchView: View {
                 .padding(.bottom, 4)
 
             ThemedScrollView {
+                // One flat ForEach with unique ids: nested per-file ForEach keyed by offset left
+                // LazyVStack rows blank or misplaced once files had many results.
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(search.results) { file in
-                        FileResultRow(file: file, isCollapsed: search.collapsed.contains(file.id)) {
-                            if search.collapsed.contains(file.id) {
-                                search.collapsed.remove(file.id)
-                            } else {
-                                search.collapsed.insert(file.id)
-                            }
-                        }
-                        if !search.collapsed.contains(file.id) {
-                            ForEach(Array(file.matches.enumerated()), id: \.offset) { _, match in
-                                MatchRow(match: match) {
-                                    workspace.openFile(file.url, reveal: (match.line, match.ranges[0]))
+                    ForEach(rows) { row in
+                        switch row {
+                        case .file(let file, let isCollapsed):
+                            FileResultRow(file: file, isCollapsed: isCollapsed) {
+                                if isCollapsed {
+                                    search.collapsed.remove(file.id)
+                                } else {
+                                    search.collapsed.insert(file.id)
                                 }
+                            }
+                        case .match(let file, let line, let range, _):
+                            MatchRow(line: line, range: range) {
+                                workspace.openFile(file.url, reveal: (line.line, range))
                             }
                         }
                     }
@@ -70,6 +72,25 @@ struct SearchView: View {
         .onChange(of: search.caseSensitive) { runSearch() }
         .onChange(of: search.wholeWord) { runSearch() }
         .onChange(of: search.regex) { runSearch() }
+    }
+
+    /// VS Code's tree: each file followed, unless collapsed, by one row per match.
+    private var rows: [ResultRow] {
+        let search = workspace.search
+        var rows: [ResultRow] = []
+        for file in search.results {
+            let isCollapsed = search.collapsed.contains(file.id)
+            rows.append(.file(file, isCollapsed: isCollapsed))
+            guard !isCollapsed else { continue }
+            var index = 0
+            for line in file.matches {
+                for range in line.ranges {
+                    rows.append(.match(file, line, range, index: index))
+                    index += 1
+                }
+            }
+        }
+        return rows
     }
 
     @ViewBuilder private var summary: some View {
@@ -88,6 +109,19 @@ struct SearchView: View {
 
     private func runSearch() {
         workspace.search.schedule(root: workspace.rootURL, repositoryRoot: workspace.repositoryRoot)
+    }
+}
+
+private enum ResultRow: Identifiable {
+    case file(SearchModel.FileResult, isCollapsed: Bool)
+    /// `index` numbers the file's matches, keeping ids unique across the whole list.
+    case match(SearchModel.FileResult, LineMatch, NSRange, index: Int)
+
+    var id: String {
+        switch self {
+        case .file(let file, _): "file:" + file.id
+        case .match(let file, _, _, let index): "match:\(index):" + file.id
+        }
     }
 }
 
@@ -143,7 +177,8 @@ private struct FileResultRow: View {
 }
 
 private struct MatchRow: View {
-    let match: LineMatch
+    let line: LineMatch
+    let range: NSRange
     let open: () -> Void
     @State private var isHovered = false
     @AppStorage(EditorSettings.sidebarFontSizeKey) private var fontSize = EditorSettings.defaultSidebarFontSize
@@ -159,39 +194,19 @@ private struct MatchRow: View {
             .contentShape(Rectangle())
             .onHover { isHovered = $0 }
             .onTapGesture(perform: open)
-            .help("Line \(match.line + 1)")
+            .help("Line \(line.line + 1)")
     }
 
-    /// The line with leading whitespace trimmed and every match highlighted; long prefixes are
-    /// elided so the first match stays visible.
+    /// The line around this row's match, with only that match highlighted.
     private var preview: AttributedString {
-        let ns = match.text as NSString
-        var start = min(leadingWhitespace(ns), match.ranges.first?.location ?? 0)
-        var elided = false
-        if let first = match.ranges.first, first.location - start > 40 {
-            start = first.location - 20
-            elided = true
-        }
-        var result = AttributedString(elided ? "…" : "")
-        var cursor = start
-        for range in match.ranges where range.location >= cursor {
-            result += AttributedString(ns.substring(with: NSRange(location: cursor, length: range.location - cursor)))
-            var hit = AttributedString(ns.substring(with: range))
-            hit.backgroundColor = Color(nsColor: Theme.searchMatch)
-            hit.foregroundColor = Theme.UI.foreground
-            result += hit
-            cursor = NSMaxRange(range)
-        }
-        result += AttributedString(ns.substring(from: min(cursor, ns.length)))
+        let preview = TextSearch.preview(of: line.text, match: range)
+        let ns = preview.text as NSString
+        var result = AttributedString(ns.substring(to: preview.match.location))
+        var hit = AttributedString(ns.substring(with: preview.match))
+        hit.backgroundColor = Color(nsColor: Theme.searchMatch)
+        hit.foregroundColor = Theme.UI.foreground
+        result += hit
+        result += AttributedString(ns.substring(from: NSMaxRange(preview.match)))
         return result
-    }
-
-    private func leadingWhitespace(_ ns: NSString) -> Int {
-        var index = 0
-        while index < ns.length, let scalar = Unicode.Scalar(ns.character(at: index)),
-              CharacterSet.whitespaces.contains(scalar) {
-            index += 1
-        }
-        return index
     }
 }
