@@ -38,6 +38,22 @@ struct Sidebar: View {
 /// Row height for sidebar lists at the configured sidebar font size.
 func sidebarRowHeight(_ fontSize: Double) -> CGFloat { fontSize + 9 }
 
+/// A file name followed by its folder, as VS Code's lists show them: one line truncated at its
+/// end, so the folder gives way first and only once it is gone does the name itself truncate.
+/// (Two side-by-side Texts each kept a sliver and an ellipsis instead.)
+struct FileNameLabel: View {
+    let name: String
+    let folder: String
+    var isStruck = false
+
+    var body: some View {
+        (Text(name).strikethrough(isStruck)
+            + Text(folder.isEmpty ? "" : "  " + folder).foregroundStyle(Theme.UI.inactiveForeground))
+            .lineLimit(1)
+            .truncationMode(.tail)
+    }
+}
+
 private struct SidebarModeTile: View {
     @Environment(Workspace.self) private var workspace
     let mode: SidebarMode
@@ -301,16 +317,13 @@ private struct ChangeRow: View {
     var body: some View {
         HStack(spacing: 6) {
             FileIcon(name: (change.path as NSString).lastPathComponent)
-            Text((change.path as NSString).lastPathComponent)
-                .lineLimit(1)
-                .strikethrough(change.status == .deleted)
-            Text((change.path as NSString).deletingLastPathComponent)
-                .foregroundStyle(Theme.UI.inactiveForeground)
-                .lineLimit(1)
-                .truncationMode(.head)
+            FileNameLabel(name: (change.path as NSString).lastPathComponent,
+                          folder: (change.path as NSString).deletingLastPathComponent,
+                          isStruck: change.status == .deleted)
+                .layoutPriority(1)
             Spacer(minLength: 4)
-            if isHovered { actions }
-            StatusBadge(status: change.status)
+            if isHovered { actions.fixedSize() }
+            StatusBadge(status: change.status).fixedSize()
         }
         .padding(.leading, 26)
         .padding(.trailing, 12)

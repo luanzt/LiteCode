@@ -111,6 +111,6 @@ final class SearchModel {
             remaining -= result.matchCount
             results.append(result)
         }
-        return (results.sorted { TextSearch.precedes($0.relativePath, $1.relativePath) }, remaining <= 0)
+        return (results.sorted { PathOrder.precedes($0.relativePath, $1.relativePath) }, remaining <= 0)
     }
 }

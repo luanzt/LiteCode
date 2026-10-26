@@ -280,7 +280,8 @@ final class Workspace: Identifiable {
         async let branchResult = Git.branch(in: root)
         async let headResult = Git.headCommit(in: root)
         let (status, branchName, head) = await (statusResult, branchResult, headResult)
-        guard root == repositoryRoot, let status else { return }
+        // VS Code lists changes by path, each folder's files before its subfolders.
+        guard root == repositoryRoot, let status = status?.sorted(by: { PathOrder.precedes($0.path, $1.path) }) else { return }
         branch = branchName
         // The gutter compares against the index, so a new HEAD (commit, checkout) or any change in
         // what is staged changes its base.

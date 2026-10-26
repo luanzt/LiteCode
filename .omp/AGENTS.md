@@ -25,7 +25,8 @@ public half is baked into every shipped build as `SUPublicEDKey`.
 - `Sources/LiteCodeCore/` — pure, UI-free logic, covered by `Tests/LiteCodeCoreTests/`:
   `LineDiff` (row alignment, hunks, intra-line spans), `GitStatus` (porcelain parser with
   staged/unstaged stages), `GutterDiff`, `TextSearch`, `FuzzyMatch`, `IconThemeManifest`,
-  `CodeStructure` (JSX element and bracket-pair scanners the highlighter runs after its regexes).
+  `PathOrder` (VS Code's path order for search results and changes), `CodeStructure` (JSX
+  element and bracket-pair scanners the highlighter runs after its regexes).
   Put new logic here when it can be tested without AppKit.
 - `Sources/LiteCode/` — the app:
   - `Editor/` — `EditorDocument` (one per open file; owns its text storage, undo, dirty state,
@@ -53,6 +54,9 @@ public half is baked into every shipped build as `SUPublicEDKey`.
 - Diff panes use **contiguous layout** (`makeScrollView(storage:contiguousLayout: true)`): rows line
   up across panes by exact y offsets, which non-contiguous height estimates break. Filler rows are
   layout-manager paragraph spacing, never inserted text, so the right pane stays the real file.
+  `makeScrollView` attaches the storage only after configuring the view, then lays a contiguous
+  view out in one `ensureLayout` pass: configuring a view that already holds text (notably
+  `textContainerInset`) made the 1,400-line diff pane take 280ms instead of 45ms.
 - An `NSScrollView` with a floating vertical ruler uses a negative-x content inset: scroll the clip
   view to `x = -contentInsets.left`, not 0. Subviews added directly to an `NSScrollView` are not
   autoresized; position overlays in the parent.

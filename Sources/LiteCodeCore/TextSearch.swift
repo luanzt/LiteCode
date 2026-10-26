@@ -83,19 +83,6 @@ public enum TextSearch {
         return results
     }
 
-    /// VS Code's search result order (`comparePaths`) for "/"-separated relative paths: folder by
-    /// folder, a folder's files before its subfolders, names in natural order ("a2" < "a10").
-    public static func precedes(_ path: String, _ other: String) -> Bool {
-        let parts = path.split(separator: "/"), otherParts = other.split(separator: "/")
-        for index in 0..<min(parts.count, otherParts.count) {
-            let isFile = index == parts.count - 1, otherIsFile = index == otherParts.count - 1
-            if isFile != otherIsFile { return isFile }
-            let order = String(parts[index]).localizedStandardCompare(String(otherParts[index]))
-            if order != .orderedSame { return order == .orderedAscending }
-        }
-        return parts.count < otherParts.count
-    }
-
     /// VS Code's preview (`Match.preview` + `lcut`): leading whitespace trimmed, the text before
     /// the match cut at a word boundary to about 26 characters behind a "…", and the whole row
     /// capped at 250 characters.

@@ -164,11 +164,24 @@ import Testing
         let short = TextSearch.preview(of: "    <ButtonView", match: NSRange(location: 5, length: 6))
         #expect(short == SearchPreview(text: "<ButtonView", match: NSRange(location: 1, length: 6)))
     }
+}
 
-    @Test func resultsListEachFoldersFilesBeforeItsSubfolders() {
+@Suite struct PathOrderTests {
+    @Test func listsEachFoldersFilesBeforeItsSubfoldersInNaturalOrder() {
         let paths = [".claude/skills/README.md", "README.md", ".claude/a.md", "AGENTS.md", "src/file10.ts", "src/file2.ts"]
-        #expect(paths.sorted(by: TextSearch.precedes)
+        #expect(paths.sorted(by: PathOrder.precedes)
             == ["AGENTS.md", "README.md", ".claude/a.md", ".claude/skills/README.md", "src/file2.ts", "src/file10.ts"])
+    }
+
+    @Test func ordersSourceControlChangesLikeVSCode() {
+        let paths = ["actions/__tests__/members-test.ts", "actions/members.ts", "actions/ActionTypes.ts",
+                     "components/user-profile/ProfileAvatar.tsx", "components/user-profile/index.ts",
+                     "components/user-profile/__tests__/profile-avatar-test.tsx"]
+        #expect(paths.sorted(by: PathOrder.precedes) == [
+            "actions/ActionTypes.ts", "actions/members.ts", "actions/__tests__/members-test.ts",
+            "components/user-profile/index.ts", "components/user-profile/ProfileAvatar.tsx",
+            "components/user-profile/__tests__/profile-avatar-test.tsx",
+        ])
     }
 }
 

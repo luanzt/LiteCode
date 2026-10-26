@@ -242,10 +242,18 @@ final class DiffDocument {
         return views.right.top(ofLine: hunk.modified.lowerBound, gapFirst: true)
     }
 
-    /// Called once the panes are on screen: the first load opens at the first change.
+    /// Called once the panes are on screen: the first load opens at the first change, as VS Code
+    /// does. Both panes are laid out and sized first: the scroll is mirrored onto the left pane,
+    /// whose freshly loaded text still had a short frame, and its clamped position came back.
     func revealFirstChangeIfNeeded() {
-        guard pendingFirstChange, isLoaded, hunkCount > 0, views.right.scrollView.window != nil,
-              let top = hunkTop(0) else { return }
+        guard pendingFirstChange, isLoaded, hunkCount > 0, views.right.scrollView.window != nil else { return }
+        for pane in [views.left, views.right] {
+            if let layout = pane.textView.layoutManager, let container = pane.textView.textContainer {
+                layout.ensureLayout(for: container)
+            }
+            pane.textView.sizeToFit()
+        }
+        guard let top = hunkTop(0) else { return }
         pendingFirstChange = false
         views.right.scroll(toY: top)
     }

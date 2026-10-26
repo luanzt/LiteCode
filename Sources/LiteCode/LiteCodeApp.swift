@@ -16,6 +16,13 @@ struct LiteCodeApp: App {
         return workspace?.activeEditor?.textView
     }
 
+    private var activeDiff: DiffDocument? {
+        if case .diff(let document) = workspace?.activeTab { return document }
+        return nil
+    }
+
+    private static let f5 = KeyEquivalent(Character(UnicodeScalar(NSF5FunctionKey)!))
+
     var body: some Scene {
         Window("LiteCode", id: "main") {
             ContentView()
@@ -77,6 +84,12 @@ struct LiteCodeApp: App {
                     .keyboardShortcut("]", modifiers: [.command, .shift])
                 Button("Previous Tab") { workspace?.selectAdjacentTab(-1) }
                     .keyboardShortcut("[", modifiers: [.command, .shift])
+                Divider()
+                // VS Code's compareEditor.nextChange / previousChange; no-ops outside a diff tab.
+                Button("Next Change") { activeDiff?.revealChange(1) }
+                    .keyboardShortcut(Self.f5, modifiers: .option)
+                Button("Previous Change") { activeDiff?.revealChange(-1) }
+                    .keyboardShortcut(Self.f5, modifiers: [.option, .shift])
                 Divider()
                 Button("Next Workspace") { workspaces.selectAdjacent(1) }
                     .keyboardShortcut("]", modifiers: [.command, .option])

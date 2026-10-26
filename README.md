@@ -30,6 +30,7 @@ and terminals alive. The workspace list and each one's open files are restored o
 | Go to workspace 1–9 (title-bar order) | ⌘1 … ⌘9 |
 | Save / Save all | ⌘S / ⌥⌘S |
 | Close tab / Next, previous tab | ⌘W / ⇧⌘] ⇧⌘[ |
+| Next / previous change in a diff | ⌥F5 / ⇧⌥F5 |
 | Find / Replace in file / Next / Previous | ⌘F / ⌥⌘F / ⌘G / ⇧⌘G |
 | Go to file (Quick Open: fuzzy file name search, recently opened first) | ⌘P |
 | Search in workspace (a single-line selection seeds ⌘F and ⇧⌘F) | ⇧⌘F |

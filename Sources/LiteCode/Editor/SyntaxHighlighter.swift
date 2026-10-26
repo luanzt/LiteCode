@@ -126,7 +126,8 @@ struct Language {
             Rule(rx("[\\w$]<([^<>()=;{}\\n]+)>"), .parameter, group: 1, within: rx("(?<![\\w$.])([A-Z][\\w$]*)")),
         ]
         if typeScript {
-            rules.append(Rule(rx("(?:[:<|&]|\\bas)\\s*\\b(string|number|boolean|any|unknown|never|object|symbol|bigint)\\b"), .type, group: 1))
+            // After `:`, `<`, `as`, or a lone `|` / `&` (unions, intersections), not `||` / `&&`.
+            rules.append(Rule(rx("(?:[:<]|(?<![|&])[|&](?![|&])|\\bas)\\s*\\b(string|number|boolean|any|unknown|never|object|symbol|bigint)\\b"), .type, group: 1))
         }
         rules += [
             Rule(rx("(?<![\\w$])\(identifier)(?=\\()"), .function),
