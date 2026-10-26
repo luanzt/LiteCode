@@ -70,5 +70,8 @@ and terminals alive. The workspace list and each one's open files are restored o
   (VS Code's `files.autoSave`: off, afterDelay with a configurable delay, onFocusChange,
   onWindowChange). Auto-save failures leave the tab dirty silently; ⌘S reports them.
 - Highlighting is regex-based and skipped for files over 400 KB.
+- Opening a folder in LiteCode from Finder, the Dock, or another app (`open -a LiteCode <folder>`,
+  as mTerm's ⌘R does) switches to that folder's workspace, adding it if needed. On a cold
+  launch the saved workspaces are restored first, then the opened folder is handled.
 - The folder is watched with FSEvents: the tree, git status, open diffs, and unmodified
   open files refresh when something changes on disk.

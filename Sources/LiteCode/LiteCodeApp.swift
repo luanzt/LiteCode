@@ -130,6 +130,11 @@ struct LiteCodeApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var keyMonitor: Any?
+    /// Paths delivered before the previous session is restored. A cold launch from Finder or
+    /// another app (`open -a LiteCode <folder>`) calls `application(_:open:)` before
+    /// `applicationDidFinishLaunching`; opening then would save over the saved workspaces.
+    /// `nil` once restored, after which paths open immediately.
+    private var pendingOpenURLs: [URL]? = []
     /// Sparkle, fed by the appcast the release script publishes. Started only in packaged builds:
     /// `swift run` binaries have no SUFeedURL, and starting without one shows an error alert.
     private let updaterController = SPUStandardUpdaterController(
@@ -153,6 +158,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for path in CommandLine.arguments.dropFirst() where !path.hasPrefix("-") {
             workspaces.open(path: URL(fileURLWithPath: path))
         }
+        pendingOpenURLs?.forEach { workspaces.open(path: $0) }
+        pendingOpenURLs = nil
 
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -166,7 +173,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        urls.forEach { Workspaces.shared.open(path: $0) }
+        if pendingOpenURLs != nil {
+            pendingOpenURLs?.append(contentsOf: urls)
+        } else {
+            urls.forEach { Workspaces.shared.open(path: $0) }
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
