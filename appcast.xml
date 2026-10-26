@@ -3,14 +3,14 @@
     <channel>
         <title>LiteCode</title>
         <item>
-            <title>1.0.0</title>
-            <pubDate>Fri, 23 Oct 2026 11:30:27 +0700</pubDate>
-            <link>https://github.com/luanzt/LiteCode/releases/tag/v1.0.0</link>
-            <sparkle:version>1.0.0</sparkle:version>
-            <sparkle:shortVersionString>1.0.0</sparkle:shortVersionString>
+            <title>1.0.1</title>
+            <pubDate>Mon, 26 Oct 2026 16:35:57 +0700</pubDate>
+            <link>https://github.com/luanzt/LiteCode/releases/tag/v1.0.1</link>
+            <sparkle:version>1.0.1</sparkle:version>
+            <sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <enclosure url="https://github.com/luanzt/LiteCode/releases/download/v1.0.0/LiteCode-1.0.0.dmg" length="6810823" type="application/octet-stream" sparkle:edSignature="9DF/sb0vIof9/mFnPq+XAZSAGw8D42+czbY5wHNknAZTYyV0QrxqsFxL3lbNUZQ2/enu0vR8qfwIULfJhLq7Dg=="/>
+            <enclosure url="https://github.com/luanzt/LiteCode/releases/download/v1.0.1/LiteCode-1.0.1.dmg" length="6752773" type="application/octet-stream" sparkle:edSignature="HKXgsvewOIFAhwL3+9zCKblfyUw612+4vGZWjLAB7ClAMEntUiOfQCk0Hw4zO1JU5qwJhp62s8PAYh5C1PMnDQ=="/>
         </item>
     </channel>
 </rss>
