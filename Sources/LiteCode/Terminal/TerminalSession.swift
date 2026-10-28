@@ -15,7 +15,7 @@ final class TerminalSession: Identifiable, LocalProcessTerminalViewDelegate {
         let shell = environment["SHELL"].flatMap { $0.isEmpty ? nil : $0 } ?? "/bin/zsh"
         title = "\((shell as NSString).lastPathComponent) \(number)"
         view = LocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 800, height: 240))
-        view.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        view.font = EditorSettings.terminalFont
         // Oh My Dark terminal.* colors.
         view.installColors(Theme.terminalANSI.map { SwiftTerm.Color(rgb: $0) })
         view.nativeBackgroundColor = Theme.terminalBackground

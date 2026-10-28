@@ -23,12 +23,14 @@ enum EditorSettings {
     static let fontFamilyKey = "editorFontFamily"
     static let sidebarFontSizeKey = "sidebarFontSize"
     static let tabFontSizeKey = "tabFontSize"
+    static let terminalFontSizeKey = "terminalFontSize"
     static let autoSaveKey = "autoSave"
     static let autoSaveDelayKey = "autoSaveDelay"
 
     static let defaultFontSize = 13.0
     static let defaultSidebarFontSize = 13.0
     static let defaultTabFontSize = 13.0
+    static let defaultTerminalFontSize = 12.0
     static let fontSizeRange = 9.0...32.0
     static let uiFontSizeRange = 10.0...20.0
     /// Milliseconds, as VS Code's `files.autoSaveDelay` (default 1000).
@@ -54,6 +56,13 @@ enum EditorSettings {
             UserDefaults.standard.set(Double(clamped), forKey: fontSizeKey)
         }
     }
+
+    static var terminalFontSize: CGFloat {
+        let stored = UserDefaults.standard.double(forKey: terminalFontSizeKey)
+        return stored > 0 ? stored : defaultTerminalFontSize
+    }
+
+    static var terminalFont: NSFont { .monospacedSystemFont(ofSize: terminalFontSize, weight: .regular) }
 
     /// Editor font family; empty means the system monospaced font (SF Mono).
     static var fontFamily: String {

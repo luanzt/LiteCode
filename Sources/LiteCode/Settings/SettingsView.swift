@@ -6,6 +6,7 @@ struct SettingsView: View {
     @AppStorage(EditorSettings.fontFamilyKey) private var fontFamily = ""
     @AppStorage(EditorSettings.sidebarFontSizeKey) private var sidebarFontSize = EditorSettings.defaultSidebarFontSize
     @AppStorage(EditorSettings.tabFontSizeKey) private var tabFontSize = EditorSettings.defaultTabFontSize
+    @AppStorage(EditorSettings.terminalFontSizeKey) private var terminalFontSize = EditorSettings.defaultTerminalFontSize
     @AppStorage(EditorSettings.autoSaveKey) private var autoSave = AutoSaveMode.off
     @AppStorage(EditorSettings.autoSaveDelayKey) private var autoSaveDelay = EditorSettings.defaultAutoSaveDelay
     @State private var families: [String] = []
@@ -27,6 +28,9 @@ struct SettingsView: View {
             Section("Interface") {
                 sizeRow("Sidebar font size", value: $sidebarFontSize, range: EditorSettings.uiFontSizeRange)
                 sizeRow("Tab bar font size", value: $tabFontSize, range: EditorSettings.uiFontSizeRange)
+            }
+            Section("Terminal") {
+                sizeRow("Font size", value: $terminalFontSize, range: EditorSettings.fontSizeRange)
             }
             Section("Files") {
                 Picker("Auto Save", selection: $autoSave) {
@@ -53,6 +57,7 @@ struct SettingsView: View {
                     fontFamily = ""
                     sidebarFontSize = EditorSettings.defaultSidebarFontSize
                     tabFontSize = EditorSettings.defaultTabFontSize
+                    terminalFontSize = EditorSettings.defaultTerminalFontSize
                     autoSave = .off
                     autoSaveDelay = EditorSettings.defaultAutoSaveDelay
                 }
@@ -65,6 +70,7 @@ struct SettingsView: View {
         // Text views hold their own fonts; restyle open editors when the editor font changes.
         .onChange(of: editorFontSize) { Workspaces.shared.refreshEditorFonts() }
         .onChange(of: fontFamily) { Workspaces.shared.refreshEditorFonts() }
+        .onChange(of: terminalFontSize) { Workspaces.shared.refreshTerminalFonts() }
     }
 
     private func sizeRow(_ title: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {

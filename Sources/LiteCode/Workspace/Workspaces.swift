@@ -201,4 +201,12 @@ final class Workspaces {
             }
         }
     }
+
+    /// Re-applies the terminal font setting to every open terminal.
+    func refreshTerminalFonts() {
+        let font = EditorSettings.terminalFont
+        for workspace in all {
+            for session in workspace.terminals { session.view.font = font }
+        }
+    }
 }
