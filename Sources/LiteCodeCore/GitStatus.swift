@@ -15,7 +15,7 @@ public struct GitChange: Hashable, Sendable, Identifiable {
     public enum Stage: String, Sendable {
         /// "Staged Changes": the index differs from HEAD.
         case staged
-        /// "Changes": the working tree differs from the index (untracked and conflicted files too).
+        /// The working tree differs from the index: "Changes", or "Merge Changes" for conflicted files.
         case unstaged
     }
 

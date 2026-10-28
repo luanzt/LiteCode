@@ -209,11 +209,14 @@ private struct FileRow: View {
     }
 }
 
-/// VS Code's Source Control view: "Staged Changes" (shown only when something is staged) above
-/// "Changes", each collapsible with hover actions on the group and on every file.
+/// VS Code's Source Control view: "Merge Changes" (unresolved conflicts) and "Staged Changes",
+/// each shown only when non-empty, above "Changes"; every group is collapsible with hover
+/// actions on the group and on every file.
 private struct ChangesView: View {
+    private enum ChangeGroup { case merge, staged, changes }
+
     @Environment(Workspace.self) private var workspace
-    @State private var collapsed: Set<GitChange.Stage> = []
+    @State private var collapsed: Set<ChangeGroup> = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -230,12 +233,14 @@ private struct ChangesView: View {
                 if workspace.changes.isEmpty {
                     placeholder("No changes")
                 } else {
+                    let merge = workspace.changes.filter { $0.status == .conflicted }
                     let staged = workspace.changes.filter { $0.stage == .staged }
-                    let unstaged = workspace.changes.filter { $0.stage == .unstaged }
+                    let unstaged = workspace.changes.filter { $0.stage == .unstaged && $0.status != .conflicted }
                     ThemedScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) {
+                            if !merge.isEmpty { group(.merge, title: "Merge Changes", changes: merge) }
                             if !staged.isEmpty { group(.staged, title: "Staged Changes", changes: staged) }
-                            group(.unstaged, title: "Changes", changes: unstaged)
+                            group(.changes, title: "Changes", changes: unstaged)
                         }
                     }
                 }
@@ -244,15 +249,18 @@ private struct ChangesView: View {
     }
 
     @ViewBuilder
-    private func group(_ stage: GitChange.Stage, title: String, changes: [GitChange]) -> some View {
-        let isCollapsed = collapsed.contains(stage)
+    private func group(_ group: ChangeGroup, title: String, changes: [GitChange]) -> some View {
+        let isCollapsed = collapsed.contains(group)
         ChangeGroupHeader(title: title, count: changes.count, isCollapsed: isCollapsed) {
-            if isCollapsed { collapsed.remove(stage) } else { collapsed.insert(stage) }
+            if isCollapsed { collapsed.remove(group) } else { collapsed.insert(group) }
         } actions: {
             RowActionButton(icon: .fileDiff, help: "Open Changes") { workspace.openDiffs(changes) }
-            if stage == .staged {
+            switch group {
+            case .merge:
+                RowActionButton(icon: .plus, help: "Stage All Merge Changes") { workspace.stage(changes) }
+            case .staged:
                 RowActionButton(icon: .minus, help: "Unstage All Changes") { workspace.unstage(changes) }
-            } else {
+            case .changes:
                 RowActionButton(icon: .undo2, help: "Discard All Changes") { workspace.discard(changes) }
                 RowActionButton(icon: .plus, help: "Stage All Changes") { workspace.stage(changes) }
             }
