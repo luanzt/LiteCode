@@ -473,17 +473,36 @@ final class Workspace: Identifiable {
     }
 
     func closeTab(_ id: String) {
-        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
-        // Unsaved edits only need a decision when no other tab keeps showing the document.
-        if let document = tabs[index].textDocument, document.isDirty,
-           !tabs.indices.contains(where: { $0 != index && tabs[$0].textDocument === document }) {
-            guard confirmDiscardingOrSaving([document]) else { return }
+        closeTabs([id])
+    }
+
+    /// Closes several tabs at once (the tab menu's Close Others / to the Right / Saved / All),
+    /// asking once about unsaved edits that no remaining tab keeps showing. Cancel closes none.
+    func closeTabs(_ ids: Set<String>) {
+        let closing = tabs.filter { ids.contains($0.id) }
+        guard !closing.isEmpty else { return }
+        let kept = tabs.filter { !ids.contains($0.id) }
+        var unsaved: [EditorDocument] = []
+        for document in closing.compactMap(\.textDocument) where document.isDirty
+            && !unsaved.contains(where: { $0 === document })
+            && !kept.contains(where: { $0.textDocument === document }) {
+            unsaved.append(document)
         }
-        if case .diff(let document) = tabs[index] { document.close() }
-        tabs.remove(at: index)
-        if activeTabID == id {
-            activeTabID = tabs.isEmpty ? nil : tabs[min(index, tabs.count - 1)].id
+        guard unsaved.isEmpty || confirmDiscardingOrSaving(unsaved) else { return }
+        for case .diff(let document) in closing { document.close() }
+        // A closed active tab hands over to the kept tab that slides into its place.
+        let keptBeforeActive = tabs.prefix { $0.id != activeTabID }.filter { !ids.contains($0.id) }.count
+        tabs = kept
+        if let activeTabID, ids.contains(activeTabID) {
+            self.activeTabID = kept.isEmpty ? nil : kept[min(keptBeforeActive, kept.count - 1)].id
         }
+    }
+
+    /// The tab menu's Reveal in Explorer View: selects the tab and shows its file in the tree,
+    /// even when the tab was already active and the row has since been scrolled away or collapsed.
+    func revealInExplorer(_ id: String) {
+        sidebarMode = .explorer
+        if activeTabID == id { revealActiveFile() } else { activeTabID = id }
     }
 
     func closeActiveTab() {

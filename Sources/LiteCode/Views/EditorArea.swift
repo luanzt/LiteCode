@@ -99,6 +99,7 @@ private struct TabBar: View {
 }
 
 private struct TabItem: View {
+    @Environment(Workspaces.self) private var workspaces
     @Environment(Workspace.self) private var workspace
     let tab: EditorTab
     let isActive: Bool
@@ -140,6 +141,43 @@ private struct TabItem: View {
         .onHover { isHovered = $0 }
         .onTapGesture { workspace.activeTabID = tab.id }
         .help(tab.fileURL.path)
+        .contextMenu { menu }
+    }
+
+    @ViewBuilder private var menu: some View {
+        let index = workspace.tabs.firstIndex { $0.id == tab.id } ?? 0
+        Button("Close") { workspace.closeTab(tab.id) }
+        Button("Close Others") { workspace.closeTabs(Set(workspace.tabs.map(\.id)).subtracting([tab.id])) }
+            .disabled(workspace.tabs.count < 2)
+        Button("Close to the Right") { workspace.closeTabs(Set(workspace.tabs.dropFirst(index + 1).map(\.id))) }
+            .disabled(index == workspace.tabs.count - 1)
+        Button("Close Saved") { workspace.closeTabs(Set(workspace.tabs.filter { !$0.isDirty }.map(\.id))) }
+        Button("Close All") { workspace.closeTabs(Set(workspace.tabs.map(\.id))) }
+        Divider()
+        Button("Copy Path") { copy(tab.fileURL.path) }
+        Button("Copy Relative Path") {
+            let root = workspace.rootURL.path + "/"
+            let path = tab.fileURL.path
+            copy(path.hasPrefix(root) ? String(path.dropFirst(root.count)) : path)
+        }
+        // A deleted file's diff has nothing on disk or in the tree to reveal.
+        if !isDeletedFileDiff {
+            Divider()
+            Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([tab.fileURL]) }
+            Button("Reveal in Explorer View") {
+                workspace.revealInExplorer(tab.id)
+                if workspaces.sidebarVisibility == .detailOnly { workspaces.toggleSidebar() }
+            }
+        }
+    }
+
+    private var isDeletedFileDiff: Bool {
+        if case .diff(let document) = tab { document.change.status == .deleted } else { false }
+    }
+
+    private func copy(_ string: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(string, forType: .string)
     }
 }
 
