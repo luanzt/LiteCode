@@ -38,13 +38,19 @@ private struct WorkspaceView: View {
                 Sidebar()
                     .navigationSplitViewColumnWidth(min: 180, ideal: 260, max: 500)
             } detail: {
-                VStack(spacing: 0) {
-                    EditorArea()
-                        .frame(minHeight: 120)
-                    if workspace.isTerminalVisible {
-                        resizeHandle
-                        TerminalPanel()
-                            .frame(height: terminalHeight)
+                // The stored height is a preference: cap it to the space left under the editor, or a
+                // window shorter than editor + terminal pushes the terminal's bottom (where the
+                // prompt is) and the status bar off screen.
+                GeometryReader { proxy in
+                    let maxTerminalHeight = max(proxy.size.height - Self.editorMinHeight - Self.handleHeight, 80)
+                    VStack(spacing: 0) {
+                        EditorArea()
+                            .frame(minHeight: Self.editorMinHeight)
+                        if workspace.isTerminalVisible {
+                            resizeHandle(maxHeight: maxTerminalHeight)
+                            TerminalPanel()
+                                .frame(height: min(terminalHeight, maxTerminalHeight))
+                        }
                     }
                 }
             }
@@ -55,7 +61,11 @@ private struct WorkspaceView: View {
         }
     }
 
-    private var resizeHandle: some View {
+    private static let editorMinHeight = 120.0
+    /// The resize handle's 1pt line plus its vertical padding.
+    private static let handleHeight = 5.0
+
+    private func resizeHandle(maxHeight: Double) -> some View {
         Rectangle()
             .fill(Theme.UI.border)
             .frame(height: 1)
@@ -67,9 +77,9 @@ private struct WorkspaceView: View {
             .gesture(
                 DragGesture(minimumDistance: 1, coordinateSpace: .global)
                     .onChanged { value in
-                        let start = dragStartHeight ?? terminalHeight
+                        let start = dragStartHeight ?? min(terminalHeight, maxHeight)
                         dragStartHeight = start
-                        terminalHeight = min(max(start - value.translation.height, 80), 900)
+                        terminalHeight = min(max(start - value.translation.height, 80), maxHeight)
                     }
                     .onEnded { _ in dragStartHeight = nil })
     }
